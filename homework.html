@@ -1,0 +1,2563 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图片转 3D 粒子工具</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    :root {
+      --ui-scale: 1;
+      --theme-main: #1a5b2b;
+      --theme-border: #d5ead9;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+      color: var(--theme-main);
+    }
+    #stage {
+      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      display: block; background: #fff; cursor: grab; touch-action: none;
+    }
+    #stage.dragging { cursor: grabbing; }
+    .panel {
+      position: fixed; left: 14px; top: 58px;
+      width: min(350px, calc(100vw - 28px));
+      border: 1px solid var(--theme-border); border-radius: 12px;
+      background: #ffffffee; box-shadow: 0 8px 20px #00000014;
+      padding: 12px;
+      transform-origin: top left;
+      transform: scale(var(--ui-scale));
+    }
+    .title { font-size: 15px; font-weight: 700; color: #207338; margin-bottom: 8px; }
+    .row {
+      display: grid; grid-template-columns: 80px 1fr 56px;
+      gap: 8px; align-items: center; margin: 8px 0;
+      color: #2d6d3d; font-size: 12px;
+    }
+    .row.row-lang {
+      grid-template-columns: auto 1fr 56px;
+    }
+    .row output { text-align: right; font-variant-numeric: tabular-nums; color: #1e5b2d; }
+    input[type="file"], input[type="range"], input[type="color"] { width: 100%; }
+    input[type="range"] { accent-color: #2fcb53; }
+    input[type="color"] {
+      border: 1px solid #c9e8cf; border-radius: 6px; background: #fff; height: 28px; padding: 2px;
+    }
+    .row select {
+      width: 100%; padding: 6px 8px; border: 1px solid #c9e8cf; border-radius: 8px;
+      background: #fff; color: #1a5b2b; font-size: 12px;
+    }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    button {
+      border: 1px solid #bfe6c8; background: #f4fff6; color: #1d6a33;
+      border-radius: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer;
+    }
+    .hint { margin-top: 8px; font-size: 12px; color: #4d815a; line-height: 1.45; }
+    .text-block { margin: 10px 0 6px; }
+    .text-block .text-label { font-size: 12px; color: #2d6d3d; display: block; margin-bottom: 6px; font-weight: 600; }
+    .text-block textarea {
+      width: 100%; min-height: 52px; resize: vertical; padding: 8px 10px;
+      border: 1px solid #c9e8cf; border-radius: 8px; font-size: 14px; color: #1a5b2b;
+      font-family: inherit; line-height: 1.35;
+    }
+    .text-block textarea::placeholder { color: #7aaa88; }
+    .text-meta {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #5a8f68;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    /* 主界面左上角语言行隐藏，改由设置面板控制 */
+    .row.row-lang { display: none; }
+    .settings-btn {
+      position: fixed;
+      left: 18px;
+      top: 18px;
+      z-index: 20;
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 12px;
+      border: 1px solid #bfe6c8;
+      background: #f4fff6;
+      color: #1d6a33;
+      cursor: pointer;
+      box-shadow: 0 4px 10px #00000014;
+    }
+    .settings-panel {
+      position: fixed;
+      left: 18px;
+      top: 48px;
+      z-index: 30;
+      width: 260px;
+      padding: 10px 12px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--theme-border);
+      background: #ffffffee;
+      box-shadow: 0 12px 28px #00000022;
+      font-size: 12px;
+      color: #2d6d3d;
+      display: none;
+    }
+    .settings-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #207338;
+    }
+    .settings-close {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: #6a8b75;
+    }
+    .settings-row {
+      margin: 6px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .settings-row label {
+      font-size: 11px;
+      color: #4d815a;
+    }
+    .settings-row select,
+    .settings-row input[type="range"],
+    .settings-row input[type="color"] {
+      width: 100%;
+    }
+    .settings-row input[type="color"] {
+      border: 1px solid #c9e8cf;
+      border-radius: 6px;
+      background: #fff;
+      height: 26px;
+      padding: 2px;
+    }
+    .btn-upload {
+      border: 1px solid #bfe6c8;
+      background: #f4fff6;
+      color: #1d6a33;
+      border-radius: 18px;
+      padding: 5px 12px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .upload-name {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #5a8f68;
+      word-break: break-all;
+    }
+    .canvas-help {
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      z-index: 15;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.4;
+      text-align: right;
+      pointer-events: none;
+    }
+    .save-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(0, 0, 0, 0.3);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .save-modal.show {
+      display: flex;
+    }
+    .save-dialog {
+      width: min(640px, 96vw);
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 18px 40px #00000033;
+      border: 1px solid #d5ead9;
+      padding: 16px 18px 16px;
+      font-size: 13px;
+      color: #2d6d3d;
+    }
+    .save-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #207338;
+    }
+    .save-close {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: #6a8b75;
+    }
+    .save-body {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+    .save-preview-wrap {
+      border-radius: 8px;
+      border: 1px solid #e0efe4;
+      background: #f7fbf8;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .save-preview-bg {
+      position: relative;
+      width: 100%;
+      padding-bottom: 68%;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .save-preview-bg.checker {
+      background-image:
+        linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee),
+        linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee);
+      background-size: 12px 12px;
+      background-position: 0 0, 6px 6px;
+    }
+    .save-preview-bg img {
+      position: absolute;
+      max-width: 100%;
+      max-height: 100%;
+      inset: 0;
+      margin: auto;
+      image-rendering: crisp-edges;
+    }
+    .save-zoom {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #fff;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .save-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .save-controls label {
+      font-size: 11px;
+      color: #4d815a;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .save-controls select {
+      width: 100%;
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid #c9e8cf;
+      background: #fff;
+      color: #1a5b2b;
+      font-size: 12px;
+    }
+    .save-controls .row-inline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #4d815a;
+    }
+    .save-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .save-footer button {
+      min-width: 70px;
+      font-size: 12px;
+    }
+    .canvas-help {
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      z-index: 15;
+      font-size: 11px;
+      color: #a0a0a0;
+      line-height: 1.4;
+      text-align: right;
+      pointer-events: none;
+    }
+    /* 欢迎覆盖层：保持与主界面一致的绿色/白色风格 */
+    #welcomeOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: #1a5b2b;
+      transition: opacity 0.35s ease;
+    }
+    #welcomeOverlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .welcome-card {
+      min-width: min(420px, 90vw);
+      max-width: 520px;
+      padding: 28px 26px 24px;
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 18px 40px #00000022;
+      border: 1px solid #d5ead9;
+      text-align: center;
+    }
+    .welcome-card.phase1 {
+      background: transparent;
+      box-shadow: none;
+      border: none;
+      min-width: 0;
+      max-width: none;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      pointer-events: auto;
+    }
+    .welcome-title-main {
+      font-size: 20px;
+      font-weight: 700;
+      color: #207338;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .welcome-title-main p {
+      margin: 2px 0;
+    }
+    .welcome-sub {
+      font-size: 13px;
+      color: #4d815a;
+      line-height: 1.5;
+      margin-top: 6px;
+    }
+    .welcome-sub p {
+      margin: 1px 0;
+    }
+    .welcome-section {
+      margin-top: 18px;
+    }
+    .welcome-lang-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #2d6d3d;
+      margin-bottom: 12px;
+    }
+    .welcome-lang-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+      margin: 0 auto 14px;
+      max-width: 260px;
+      font-size: 13px;
+      color: #245735;
+    }
+    .welcome-lang-options label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .welcome-lang-options input[type="radio"] {
+      accent-color: #2fcb53;
+    }
+    .welcome-lang-row {
+      display: flex;
+      gap: 22px;
+      justify-content: center;
+      align-items: center;
+      margin: 16px 0 18px;
+      flex-wrap: wrap;
+      display: none;
+    }
+    .welcome-lang-btn {
+      border: none;
+      background: transparent;
+      color: transparent;
+      border-radius: 999px;
+      padding: 10px 26px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .welcome-lang-btn.active {
+      box-shadow: 0 0 0 2px #86d99b44 inset;
+    }
+    .welcome-start-btn {
+      margin-top: 10px;
+      padding: 9px 26px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
+      display: none;
+    }
+    .welcome-start-btn {
+      margin-top: 4px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: transparent;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: none;
+      display: none;
+    }
+    .welcome-start-btn:hover {
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <button id="settingsToggle" class="settings-btn" data-i18n="settingsBtn" style="display:none">设置</button>
+  <div id="settingsPanel" class="settings-panel">
+    <div class="settings-panel-header">
+      <span data-i18n="settingsTitle">设置 Settings</span>
+      <button type="button" id="settingsClose" class="settings-close">✕</button>
+    </div>
+    <div class="settings-row">
+      <label for="settingsLocale">界面语言 Language</label>
+      <select id="settingsLocale">
+        <option value="zh">中文（简体）</option>
+        <option value="zh-TW">中文（繁體）</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <label for="uiScale">界面字号 / 縮放 · UI scale</label>
+      <input id="uiScale" type="range" min="80" max="130" step="5" value="100" />
+    </div>
+    <div class="settings-row">
+      <label for="themeMainColor">主题颜色 Theme color</label>
+      <input id="themeMainColor" type="color" value="#1a5b2b" />
+    </div>
+    <div class="settings-row">
+      <label for="themeBorderColor">线框颜色 Border color</label>
+      <input id="themeBorderColor" type="color" value="#d5ead9" />
+    </div>
+  </div>
+
+  <!-- 首屏欢迎覆盖层 -->
+  <div id="welcomeOverlay">
+    <div id="welcomeCard" class="welcome-card phase1">
+      <div id="welcomeStep1">
+        <!-- 第一步由画布粒子动画渲染欢迎文案与“继续”按钮 -->
+      </div>
+      <div id="welcomeStep2" class="welcome-section" style="display:none">
+        <div class="welcome-lang-title" id="welcomeLangTitle">
+          <!-- 第二步标题由粒子动画渲染 -->
+        </div>
+        <div class="welcome-lang-row">
+          <button type="button" class="welcome-lang-btn active" data-welcome-lang="zh">中文（简体）</button>
+          <button type="button" class="welcome-lang-btn" data-welcome-lang="zh-TW">中文（繁體）</button>
+          <button type="button" class="welcome-lang-btn" data-welcome-lang="en">English</button>
+        </div>
+        <button id="welcomeStartBtn" class="welcome-start-btn">
+          开始制作 · 開始製作 · Start
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel" style="display:none">
+    <label class="row row-lang">
+      <span data-i18n="languageLabel">语言 Language</span>
+      <select id="localeSelect">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <span></span>
+    </label>
+    <div class="title" data-i18n="panelTitle">图片 / 文字 -> 3D 粒子（可选颜色）</div>
+    <label class="row">
+      <span data-i18n="uploadLabel">上传图片</span>
+      <div>
+        <button id="uploadTrigger" type="button" class="btn-upload" data-i18n="uploadButton">选择文件</button>
+        <div id="uploadName" class="upload-name" data-i18n="uploadNone">未选择文件</div>
+      </div>
+      <input id="upload" type="file" accept="image/*" style="display:none" />
+    </label>
+
+    <div class="text-block">
+      <span class="text-label" data-i18n="textParticles">文字粒子</span>
+      <textarea id="textInput" maxlength="120" rows="2" data-i18n-placeholder="textPlaceholder" placeholder="输入文字，支持换行；点按钮或 Ctrl/⌘+Enter 生成"></textarea>
+      <div class="btns" style="margin-top:8px">
+        <button id="textUndo" type="button" data-i18n="undo">撤销</button>
+        <button id="textRedo" type="button" data-i18n="redo">重做</button>
+        <button id="textClear" type="button" data-i18n="clear">清空</button>
+      </div>
+      <div class="text-meta" id="textMeta">0 / 120</div>
+      <label class="row" style="margin-top:8px"><span data-i18n="fontSizeLabel">字号</span>
+        <input id="textFontSize" type="range" min="28" max="160" step="2" value="72" />
+        <output id="textFontSizeOut">72</output>
+      </label>
+      <label class="row" style="margin-top:8px"><span data-i18n="fontFamilyLabel">字体</span>
+        <select id="textFontFamily">
+          <option value="system" data-i18n="fontOptSystem">系统 UI</option>
+          <option value="pingfang" data-i18n="fontOptPingFang">苹方</option>
+          <option value="yahei" data-i18n="fontOptYaHei">微软雅黑</option>
+          <option value="songti" data-i18n="fontOptSong">宋体</option>
+          <option value="kaiti" data-i18n="fontOptKai">楷体</option>
+          <option value="heiti" data-i18n="fontOptHei">黑体</option>
+          <option value="mono" data-i18n="fontOptMono">等宽</option>
+          <option value="serif" data-i18n="fontOptSerif">衬线</option>
+          <option value="rounded" data-i18n="fontOptRounded">圆体</option>
+          <option value="arial" data-i18n="fontOptArial">Arial</option>
+          <option value="impact" data-i18n="fontOptImpact">Impact</option>
+        </select>
+        <span></span>
+      </label>
+      <label class="row" style="margin-top:8px"><span data-i18n="fontBoldLabel">加粗</span>
+        <input id="textBold" type="checkbox" checked />
+        <span></span>
+      </label>
+      <label class="row" style="margin-top:8px"><span data-i18n="fontItalicLabel">斜体</span>
+        <input id="textItalic" type="checkbox" />
+        <span></span>
+      </label>
+      <label class="row" style="margin-top:8px"><span data-i18n="fontUnderlineLabel">下划线</span>
+        <input id="textUnderline" type="checkbox" />
+        <span></span>
+      </label>
+      <label class="row" style="margin-top:8px"><span data-i18n="letterSpacingLabel">字距</span>
+        <input id="textLetterSpacing" type="range" min="-2" max="20" step="1" value="0" />
+        <output id="textLetterSpacingOut">0</output>
+      </label>
+      <div class="btns" style="margin-top:8px">
+        <button id="applyText" type="button" data-i18n="applyText">生成文字粒子</button>
+      </div>
+    </div>
+
+    <label class="row"><span data-i18n="stepLabel">间距</span>
+      <input id="step" type="range" min="2" max="8" step="1" value="3" />
+      <output id="stepOut">3</output>
+    </label>
+    <label class="row"><span data-i18n="sizeLabel">粒子大小</span>
+      <input id="size" type="range" min="0.7" max="2.8" step="0.1" value="1.3" />
+      <output id="sizeOut">1.3</output>
+    </label>
+    <label class="row"><span data-i18n="depthLabel">深度</span>
+      <input id="depth" type="range" min="0" max="120" step="1" value="0" />
+      <output id="depthOut">0</output>
+    </label>
+    <label class="row"><span data-i18n="thresholdLabel">背景阈值</span>
+      <input id="threshold" type="range" min="150" max="250" step="1" value="235" />
+      <output id="thresholdOut">235</output>
+    </label>
+    <label class="row"><span data-i18n="fovLabel">透视</span>
+      <input id="fov" type="range" min="360" max="1200" step="10" value="760" />
+      <output id="fovOut">760</output>
+    </label>
+    <label class="row"><span data-i18n="particleColorLabel">粒子颜色</span>
+      <input id="particleColor" type="color" value="#24d252" />
+      <output id="colorOut">#24d252</output>
+    </label>
+    <label class="row"><span data-i18n="bgModeLabel">背景模式</span>
+      <select id="bgMode">
+        <option value="solid" selected data-i18n="bgSolid">纯色</option>
+        <option value="gradient" data-i18n="bgGradient">渐变</option>
+      </select>
+      <span style="font-size:11px;color:#5a8f68" data-i18n="bgOnlyColor1">纯色仅用色1</span>
+    </label>
+    <label class="row"><span data-i18n="bgColor1Label">背景色1</span>
+      <input id="bgColor1" type="color" value="#ffffff" />
+      <output id="bgColor1Out">#ffffff</output>
+    </label>
+    <label class="row" id="bgColor2Row"><span data-i18n="bgColor2Label">背景色2</span>
+      <input id="bgColor2" type="color" value="#d5f0dd" />
+      <output id="bgColor2Out">#d5f0dd</output>
+    </label>
+    <label class="row" id="bgGradAngleRow"><span data-i18n="gradAngleLabel">渐变角度</span>
+      <input id="bgAngle" type="range" min="0" max="360" step="1" value="128" />
+      <output id="bgAngleOut">128</output>
+    </label>
+
+    <div class="btns">
+      <button id="rebuild" data-i18n="rebuild">重新生成</button>
+      <button id="explode" data-i18n="explode">再次散开</button>
+      <button id="resetView" data-i18n="resetView">重置视角</button>
+      <button id="saveImage" type="button" data-i18n="saveImage">保存图片</button>
+    </div>
+    <div class="btns" style="margin-top:6px">
+      <button id="startRecord" type="button" data-i18n="startRecord">开始录制</button>
+      <button id="stopRecord" type="button" disabled data-i18n="stopRecord">停止录制</button>
+    </div>
+    <div class="text-meta" id="recordStatus" style="text-align:left;margin-top:4px">未录制 · 输出为视频（WebM 或 MP4，取决于浏览器）</div>
+    <div class="hint" id="hintBox"></div>
+  </section>
+
+  <div id="saveModal" class="save-modal">
+    <div class="save-dialog">
+      <div class="save-header">
+        <span data-i18n="saveDialogTitle">保存图片</span>
+        <button type="button" id="saveDialogClose" class="save-close">✕</button>
+      </div>
+      <div class="save-body">
+        <div class="save-preview-wrap">
+          <div id="savePreviewBg" class="save-preview-bg">
+            <img id="savePreviewImg" alt="preview" />
+            <div id="saveZoomBtn" class="save-zoom">+</div>
+          </div>
+        </div>
+        <div class="save-controls">
+          <div>
+            <label for="saveFormat" data-i18n="saveFormatLabel">保存格式</label>
+            <select id="saveFormat">
+              <option value="png" data-i18n="saveFormatPng">PNG 图片</option>
+              <option value="jpeg" data-i18n="saveFormatJpeg">JPEG 图片</option>
+            </select>
+          </div>
+          <div id="savePngOptions" class="row-inline">
+            <input type="checkbox" id="saveTransparent" />
+            <label for="saveTransparent" data-i18n="saveTransparentLabel">PNG 透明背景</label>
+          </div>
+        </div>
+      </div>
+      <div class="save-footer">
+        <button type="button" id="saveDialogConfirm" data-i18n="saveConfirm">保存</button>
+        <button type="button" id="saveDialogCancel" data-i18n="saveCancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d");
+    const off = document.createElement("canvas");
+    const offCtx = off.getContext("2d", { willReadFrequently: true });
+
+    const uploadInput = document.getElementById("upload");
+    const stepInput = document.getElementById("step");
+    const sizeInput = document.getElementById("size");
+    const depthInput = document.getElementById("depth");
+    const thresholdInput = document.getElementById("threshold");
+    const fovInput = document.getElementById("fov");
+    const particleColorInput = document.getElementById("particleColor");
+    const bgModeSelect = document.getElementById("bgMode");
+    const bgColor1Input = document.getElementById("bgColor1");
+    const bgColor2Input = document.getElementById("bgColor2");
+    const bgAngleInput = document.getElementById("bgAngle");
+    const bgColor1Out = document.getElementById("bgColor1Out");
+    const bgColor2Out = document.getElementById("bgColor2Out");
+    const bgAngleOut = document.getElementById("bgAngleOut");
+    const bgGradAngleRow = document.getElementById("bgGradAngleRow");
+    const rebuildBtn = document.getElementById("rebuild");
+    const explodeBtn = document.getElementById("explode");
+    const resetViewBtn = document.getElementById("resetView");
+    const saveImageBtn = document.getElementById("saveImage");
+    const startRecordBtn = document.getElementById("startRecord");
+    const stopRecordBtn = document.getElementById("stopRecord");
+    const recordStatusEl = document.getElementById("recordStatus");
+    const textInput = document.getElementById("textInput");
+    const textUndoBtn = document.getElementById("textUndo");
+    const textRedoBtn = document.getElementById("textRedo");
+    const textClearBtn = document.getElementById("textClear");
+    const textMeta = document.getElementById("textMeta");
+    const textFontSizeInput = document.getElementById("textFontSize");
+    const textFontSizeOut = document.getElementById("textFontSizeOut");
+    const textFontFamilySelect = document.getElementById("textFontFamily");
+    const textBoldInput = document.getElementById("textBold");
+    const textItalicInput = document.getElementById("textItalic");
+    const textUnderlineInput = document.getElementById("textUnderline");
+    const textLetterSpacingInput = document.getElementById("textLetterSpacing");
+    const textLetterSpacingOut = document.getElementById("textLetterSpacingOut");
+    const applyTextBtn = document.getElementById("applyText");
+    const localeSelect = document.getElementById("localeSelect");
+
+    const settingsToggle = document.getElementById("settingsToggle");
+    const settingsPanel = document.getElementById("settingsPanel");
+    const settingsClose = document.getElementById("settingsClose");
+    const settingsLocale = document.getElementById("settingsLocale");
+    const uiScaleInput = document.getElementById("uiScale");
+    const themeMainColorInput = document.getElementById("themeMainColor");
+    const themeBorderColorInput = document.getElementById("themeBorderColor");
+
+    const stepOut = document.getElementById("stepOut");
+    const sizeOut = document.getElementById("sizeOut");
+    const depthOut = document.getElementById("depthOut");
+    const thresholdOut = document.getElementById("thresholdOut");
+    const fovOut = document.getElementById("fovOut");
+    const colorOut = document.getElementById("colorOut");
+
+    const welcomeOverlay = document.getElementById("welcomeOverlay");
+    const welcomeCard = document.getElementById("welcomeCard");
+    const welcomeStep1 = document.getElementById("welcomeStep1");
+    const welcomeStep2 = document.getElementById("welcomeStep2");
+    const welcomeStartBtn = document.getElementById("welcomeStartBtn");
+    const welcomeLangTitle = document.getElementById("welcomeLangTitle");
+    const welcomeLangBtns = Array.from(document.querySelectorAll("[data-welcome-lang]"));
+    let welcomePhase = 1;
+    const welcomeWords = [
+      "你好！欢迎使用粒子生成工具",
+      "您好！歡迎使用粒子生成工具",
+      "Hello! Welcome to the Particle Generator"
+    ];
+    const welcomeContinueWords = ["继续", "繼續", "Continue"];
+    const welcomeAnim = {
+      particles: [],
+      buttonParticles: [],
+      lastSwitch: 0,
+      idx: 0,
+      scatterUntil: 0,
+      buttonBounds: null
+    };
+    const welcomeStep2Words = ["请选择你的语言", "請選擇你的語言", "Please choose your language"];
+    const welcomeStep2Anim = {
+      particles: [],
+      lastSwitch: 0,
+      idx: 0,
+      scatterUntil: 0,
+      locked: false,
+      lockedLang: "zh"
+    };
+    const welcomeStep2Static = [];
+    const welcomeStep2HitBoxes = {};
+
+    const particles = [];
+    let paused = false;
+    let currentImage = null;
+    let explosionStart = 0;
+    const explodeDuration = 2600;
+
+    const CLICK_BURST_MS = 1000;
+    const CLICK_BURST_SIGMA_PX = 92;
+    const CLICK_BURST_DRAG_PX = 8;
+    const CLICK_BURST_IMPULSE = 5.2;
+    const RECORD_FPS = 30;
+
+    let mediaRecorder = null;
+    let recordChunks = [];
+    let canvasStream = null;
+    const TEXT_MAX_LEN = Number(textInput.maxLength) || 120;
+
+    const textHistory = {
+      undo: [textInput.value],
+      redo: [],
+      mute: false
+    };
+
+    const I18N = {
+      zh: {
+        docTitle: "图片转 3D 粒子工具",
+        languageLabel: "语言 Language",
+        panelTitle: "图片 / 文字 -> 3D 粒子（可选颜色）",
+        textParticles: "文字粒子",
+        textPlaceholder: "输入文字，支持换行；点按钮或 Ctrl/⌘+Enter 生成",
+        undo: "撤销",
+        redo: "重做",
+        clear: "清空",
+        fontSizeLabel: "字号",
+        fontFamilyLabel: "字体",
+        fontOptSystem: "系统 UI",
+        fontOptPingFang: "苹方",
+        fontOptYaHei: "微软雅黑",
+        fontOptSong: "宋体",
+        fontOptKai: "楷体",
+        fontOptHei: "黑体",
+        fontOptMono: "等宽",
+        fontOptSerif: "衬线",
+        fontOptRounded: "圆体",
+        fontOptArial: "Arial / 西文无衬线",
+        fontOptImpact: "Impact",
+        fontBoldLabel: "加粗",
+        fontItalicLabel: "斜体",
+        fontUnderlineLabel: "下划线",
+        letterSpacingLabel: "字距",
+        applyText: "生成文字粒子",
+        stepLabel: "间距",
+        sizeLabel: "粒子大小",
+        depthLabel: "深度",
+        thresholdLabel: "背景阈值",
+        fovLabel: "透视",
+        particleColorLabel: "粒子颜色",
+        bgModeLabel: "背景模式",
+        bgSolid: "纯色",
+        bgGradient: "渐变",
+        bgOnlyColor1: "纯色仅用色1",
+        bgColor1Label: "背景色1",
+        bgColor2Label: "背景色2",
+        gradAngleLabel: "渐变角度",
+        rebuild: "重新生成",
+        explode: "再次散开",
+        resetView: "重置视角",
+        saveImage: "保存图片",
+        startRecord: "开始录制",
+        stopRecord: "停止录制",
+        settingsBtn: "设置",
+        settingsTitle: "设置",
+        uploadLabel: "上传图片",
+        uploadButton: "选择文件",
+        uploadNone: "未选择文件",
+        settingsBtn: "设置",
+        settingsTitle: "设置",
+        uploadLabel: "上传图片",
+        recordIdle: "未录制 · 输出为视频（WebM 或 MP4，取决于浏览器）",
+        recordRec: "录制中… 点「停止录制」结束并下载视频",
+        helpScroll: "滚轮：调节镜头距离",
+        helpRotate: "左键：旋转镜头角度",
+        helpPan: "Ctrl + 左键：平移镜头",
+        saveDialogTitle: "保存图片",
+        saveFormatLabel: "保存格式",
+        saveFormatPng: "PNG 图片",
+        saveFormatJpeg: "JPEG 图片",
+        saveTransparentLabel: "PNG 透明背景",
+        saveConfirm: "保存",
+        saveCancel: "取消",
+        hintHtml:
+          "上传图片或输入文字后点「生成文字粒子」，粒子先散开再汇聚。拖动旋转，滚轮缩放。<br />" +
+          "深度轴在厚度范围内均匀随机，避免挤成薄片。<br />" +
+          "在画面上<strong>点按</strong>（不拖动）：影响区为<strong>扩散状</strong>（非硬圆），越远越弱，约 1 秒后收回。<br />" +
+          "<strong>空格</strong>：暂停 / 继续画面（输入框、下拉框内不会触发）。<br />" +
+          "<strong>录制</strong>：将<strong>画布动画</strong>录成视频下载（不含左侧控制面板；与「保存图片」同为当前画布内容）。",
+        alertCaptureStream: "当前浏览器不支持从画布录制（canvas.captureStream）。",
+        alertMediaRecorder: "当前浏览器不支持 MediaRecorder，无法录制视频。",
+        alertMimeType: "找不到可用的视频编码格式，请换用 Chrome / Edge / Firefox 等浏览器再试。"
+      },
+      "zh-TW": {
+        docTitle: "圖片轉 3D 粒子工具",
+        languageLabel: "語言 Language",
+        panelTitle: "圖片 / 文字 → 3D 粒子（可選顏色）",
+        textParticles: "文字粒子",
+        textPlaceholder: "輸入文字，支援換行；點按按鈕或 Ctrl/⌘+Enter 生成",
+        undo: "復原",
+        redo: "重做",
+        clear: "清空",
+        fontSizeLabel: "字級",
+        fontFamilyLabel: "字型",
+        fontOptSystem: "系統 UI",
+        fontOptPingFang: "苹方",
+        fontOptYaHei: "微軟正黑體",
+        fontOptSong: "宋體",
+        fontOptKai: "楷體",
+        fontOptHei: "黑體",
+        fontOptMono: "等寬",
+        fontOptSerif: "襯線",
+        fontOptRounded: "圓體",
+        fontOptArial: "Arial / 西文無襯線",
+        fontOptImpact: "Impact",
+        fontBoldLabel: "粗體",
+        fontItalicLabel: "斜體",
+        fontUnderlineLabel: "底線",
+        letterSpacingLabel: "字距",
+        applyText: "生成文字粒子",
+        stepLabel: "間距",
+        sizeLabel: "粒子大小",
+        depthLabel: "深度",
+        thresholdLabel: "背景閾值",
+        fovLabel: "透視",
+        particleColorLabel: "粒子顏色",
+        bgModeLabel: "背景模式",
+        bgSolid: "純色",
+        bgGradient: "漸層",
+        bgOnlyColor1: "純色僅使用色 1",
+        bgColor1Label: "背景色1",
+        bgColor2Label: "背景色2",
+        gradAngleLabel: "漸層角度",
+        rebuild: "重新生成",
+        explode: "再次散開",
+        resetView: "重置視角",
+        saveImage: "儲存圖片",
+        startRecord: "開始錄製",
+        stopRecord: "停止錄製",
+        settingsBtn: "設定",
+        settingsTitle: "設定",
+        uploadLabel: "上傳圖片",
+        uploadButton: "選擇檔案",
+        uploadNone: "尚未選擇檔案",
+        recordIdle: "未錄製 · 輸出為影片（WebM 或 MP4，取決於瀏覽器）",
+        recordRec: "錄製中… 點「停止錄製」結束並下載影片",
+        helpScroll: "滾輪：調整鏡頭距離",
+        helpRotate: "左鍵：旋轉鏡頭角度",
+        helpPan: "Ctrl + 左鍵：平移鏡頭",
+        saveDialogTitle: "儲存圖片",
+        saveFormatLabel: "儲存格式",
+        saveFormatPng: "PNG 圖片",
+        saveFormatJpeg: "JPEG 圖片",
+        saveTransparentLabel: "PNG 透明背景",
+        saveConfirm: "儲存",
+        saveCancel: "取消",
+        hintHtml:
+          "上傳圖片或輸入文字後點「生成文字粒子」，粒子會先散開再聚合。拖曳旋轉，滾輪縮放。<br />" +
+          "深度軸在厚度範圍內均勻隨機，避免擠成薄片。<br />" +
+          "在畫面上<strong>點按</strong>（不拖動）：影響區為<strong>擴散狀</strong>（非硬圓），越遠越弱，約 1 秒後收回。<br />" +
+          "<strong>空白鍵</strong>：暫停 / 繼續畫面（輸入框、下拉框內不會觸發）。<br />" +
+          "<strong>錄製</strong>：將<strong>畫布動畫</strong>錄成影片下載（不含左側控制面板；與「儲存圖片」同為當前畫布內容）。",
+        alertCaptureStream: "目前瀏覽器不支援從畫布錄製（canvas.captureStream）。",
+        alertMediaRecorder: "目前瀏覽器不支援 MediaRecorder，無法錄製影片。",
+        alertMimeType: "找不到可用的視訊編碼格式，請改用 Chrome / Edge / Firefox 等瀏覽器再試。"
+      },
+      en: {
+        docTitle: "Image to 3D Particles",
+        languageLabel: "Language",
+        panelTitle: "Image / Text → 3D particles (optional color)",
+        textParticles: "Text particles",
+        textPlaceholder: "Type text; line breaks OK. Use the button or Ctrl/⌘+Enter to generate.",
+        undo: "Undo",
+        redo: "Redo",
+        clear: "Clear",
+        fontSizeLabel: "Font size",
+        fontFamilyLabel: "Font family",
+        fontOptSystem: "System UI",
+        fontOptPingFang: "PingFang SC",
+        fontOptYaHei: "Microsoft YaHei",
+        fontOptSong: "Song / Ming",
+        fontOptKai: "Kai",
+        fontOptHei: "Heiti",
+        fontOptMono: "Monospace",
+        fontOptSerif: "Serif",
+        fontOptRounded: "Rounded",
+        fontOptArial: "Arial / Sans",
+        fontOptImpact: "Impact",
+        fontBoldLabel: "Bold",
+        fontItalicLabel: "Italic",
+        fontUnderlineLabel: "Underline",
+        letterSpacingLabel: "Letter spacing",
+        applyText: "Generate text",
+        stepLabel: "Spacing",
+        sizeLabel: "Particle size",
+        depthLabel: "Depth",
+        thresholdLabel: "Bg brightness cutoff",
+        fovLabel: "Perspective",
+        particleColorLabel: "Particle color",
+        bgModeLabel: "Background",
+        bgSolid: "Solid",
+        bgGradient: "Gradient",
+        bgOnlyColor1: "Solid uses color 1 only",
+        bgColor1Label: "Background 1",
+        bgColor2Label: "Background 2",
+        gradAngleLabel: "Gradient angle",
+        rebuild: "Regenerate",
+        explode: "Scatter again",
+        resetView: "Reset view",
+        saveImage: "Save image",
+        startRecord: "Start recording",
+        stopRecord: "Stop recording",
+        settingsBtn: "Settings",
+        settingsTitle: "Settings",
+        uploadLabel: "Upload image",
+        uploadButton: "Choose file",
+        uploadNone: "No file chosen",
+        recordIdle: "Idle · Video export (WebM or MP4 depends on browser)",
+        recordRec: "Recording… click Stop to save video",
+        helpScroll: "Scroll: adjust camera distance",
+        helpRotate: "Left mouse: rotate camera",
+        helpPan: "Ctrl + left mouse: pan camera",
+        saveDialogTitle: "Save image",
+        saveFormatLabel: "Format",
+        saveFormatPng: "PNG image",
+        saveFormatJpeg: "JPEG image",
+        saveTransparentLabel: "PNG with transparent background",
+        saveConfirm: "Save",
+        saveCancel: "Cancel",
+        hintHtml:
+          "Upload an image or enter text, then click <strong>Generate text</strong> — particles scatter then gather. Drag to rotate; scroll wheel scales the shape.<br />" +
+          "Depth is randomized along thickness to avoid a flat sheet.<br />" +
+          "<strong>Click</strong> the canvas (no drag): diffuse burst; weaker with distance; ~1s recovery.<br />" +
+          "<strong>Space</strong>: pause / resume (not when typing in inputs).<br />" +
+          "<strong>Record</strong>: saves <strong>canvas animation</strong> as video (no side panel; same area as Save image).",
+        alertCaptureStream: "This browser does not support canvas recording (canvas.captureStream).",
+        alertMediaRecorder: "This browser does not support MediaRecorder.",
+        alertMimeType: "No supported video codec. Try Chrome, Edge, or Firefox."
+      }
+    };
+
+    let locale = "zh";
+
+    function t(key) {
+      const pack = I18N[locale] || I18N.zh;
+      return pack[key] !== undefined ? pack[key] : I18N.zh[key] || key;
+    }
+
+    function applyLocale() {
+      if (locale === "zh") {
+        document.documentElement.lang = "zh-CN";
+      } else if (locale === "zh-TW") {
+        document.documentElement.lang = "zh-Hant";
+      } else {
+        document.documentElement.lang = "en";
+      }
+      document.title = t("docTitle");
+      if (localeSelect) localeSelect.value = locale;
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (!key) return;
+        el.textContent = t(key);
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (key) el.placeholder = t(key);
+      });
+      const hintBox = document.getElementById("hintBox");
+      if (hintBox) hintBox.innerHTML = t("hintHtml");
+      updateRecordUI();
+    }
+
+    const view = {
+      rotX: -0.18,
+      rotY: 0.45,
+      modelScale: 1,
+      cameraBase: 760,
+      dragging: false,
+      dragMode: "rotate",
+      lastX: 0,
+      lastY: 0,
+      ptrDown: false,
+      ptrX0: 0,
+      ptrY0: 0,
+      ptrMoved: false,
+      centerX: 0,
+      centerY: 0,
+      panX: 0,
+      panY: 0
+    };
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+    function hexToRgb(hex) {
+      const clean = hex.replace("#", "");
+      const num = parseInt(clean, 16);
+      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    function updateOutputs() {
+      stepOut.value = stepInput.value;
+      sizeOut.value = Number(sizeInput.value).toFixed(1);
+      depthOut.value = depthInput.value;
+      thresholdOut.value = thresholdInput.value;
+      fovOut.value = fovInput.value;
+      colorOut.value = particleColorInput.value;
+      view.cameraBase = Number(fovInput.value);
+      if (textFontSizeOut) textFontSizeOut.value = textFontSizeInput.value;
+      if (textLetterSpacingOut && textLetterSpacingInput) textLetterSpacingOut.value = textLetterSpacingInput.value;
+      if (bgColor1Out) bgColor1Out.value = bgColor1Input.value;
+      if (bgColor2Out) bgColor2Out.value = bgColor2Input.value;
+      if (bgAngleOut) bgAngleOut.value = bgAngleInput.value;
+      syncBgControls();
+      updateTextMeta();
+    }
+
+    function updateTextMeta() {
+      if (!textMeta) return;
+      textMeta.textContent = `${textInput.value.length} / ${TEXT_MAX_LEN}`;
+    }
+
+    function syncTextButtons() {
+      if (textUndoBtn) textUndoBtn.disabled = textHistory.undo.length <= 1;
+      if (textRedoBtn) textRedoBtn.disabled = textHistory.redo.length === 0;
+      if (textClearBtn) textClearBtn.disabled = textInput.value.length === 0;
+    }
+
+    function pushTextHistory(val) {
+      if (textHistory.mute) return;
+      const arr = textHistory.undo;
+      if (arr[arr.length - 1] === val) return;
+      arr.push(val);
+      if (arr.length > 80) arr.shift();
+      textHistory.redo.length = 0;
+      syncTextButtons();
+    }
+
+    function setTextValueWithHistory(val, keepRedo) {
+      textHistory.mute = true;
+      textInput.value = val;
+      textHistory.mute = false;
+      if (!keepRedo) textHistory.redo.length = 0;
+      updateTextMeta();
+      syncTextButtons();
+    }
+
+    function undoText() {
+      if (textHistory.undo.length <= 1) return;
+      const current = textHistory.undo.pop();
+      textHistory.redo.push(current);
+      const prev = textHistory.undo[textHistory.undo.length - 1];
+      setTextValueWithHistory(prev, true);
+    }
+
+    function redoText() {
+      if (textHistory.redo.length === 0) return;
+      const next = textHistory.redo.pop();
+      textHistory.undo.push(next);
+      setTextValueWithHistory(next, true);
+    }
+
+    function clearText() {
+      if (!textInput.value) return;
+      setTextValueWithHistory("", false);
+      pushTextHistory(textInput.value);
+    }
+
+    function syncBgControls() {
+      const grad = bgModeSelect.value === "gradient";
+      if (bgGradAngleRow) bgGradAngleRow.style.opacity = grad ? "1" : "0.42";
+      const rowC2 = document.getElementById("bgColor2Row");
+      if (rowC2) rowC2.style.opacity = grad ? "1" : "0.42";
+    }
+
+    function drawBackground() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (bgModeSelect.value === "solid") {
+        ctx.fillStyle = bgColor1Input.value;
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        const deg = Number(bgAngleInput.value);
+        const rad = (deg * Math.PI) / 180;
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        const L = Math.hypot(w, h) * 0.65 + 2;
+        const x0 = cx - Math.cos(rad) * L;
+        const y0 = cy - Math.sin(rad) * L;
+        const x1 = cx + Math.cos(rad) * L;
+        const y1 = cy + Math.sin(rad) * L;
+        const g = ctx.createLinearGradient(x0, y0, x1, y1);
+        g.addColorStop(0, bgColor1Input.value);
+        g.addColorStop(1, bgColor2Input.value);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+      }
+    }
+
+    function textToPointCloud(text, fontPx, centerX, centerY, maxW, step, weight, keepRate) {
+      const c = document.createElement("canvas");
+      c.width = Math.max(16, Math.floor(maxW + 80));
+      c.height = Math.max(16, Math.floor(fontPx * 1.8 + 80));
+      const cctx = c.getContext("2d");
+      cctx.fillStyle = "#fff";
+      cctx.fillRect(0, 0, c.width, c.height);
+      cctx.fillStyle = "#111";
+      cctx.textAlign = "center";
+      cctx.textBaseline = "middle";
+      cctx.font = `${weight || 600} ${fontPx}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif`;
+      cctx.fillText(text, c.width / 2, c.height / 2);
+      const img = cctx.getImageData(0, 0, c.width, c.height).data;
+      const pts = [];
+      const keep = keepRate == null ? 1 : keepRate;
+      for (let y = 0; y < c.height; y += step) {
+        for (let x = 0; x < c.width; x += step) {
+          const i = (y * c.width + x) * 4;
+          const lum = 0.299 * img[i] + 0.587 * img[i + 1] + 0.114 * img[i + 2];
+          if (lum < 150 && Math.random() <= keep) {
+            pts.push({
+              x: centerX + (x - c.width / 2),
+              y: centerY + (y - c.height / 2)
+            });
+          }
+        }
+      }
+      return pts;
+    }
+
+    function assignTargetsFromPoints(targetArr, pts, now) {
+      const n = Math.max(targetArr.length, pts.length);
+      if (targetArr.length < n) {
+        for (let i = targetArr.length; i < n; i++) {
+          targetArr.push({
+            x: window.innerWidth * 0.5 + (Math.random() - 0.5) * 60,
+            y: window.innerHeight * 0.5 + (Math.random() - 0.5) * 60,
+            tx: window.innerWidth * 0.5,
+            ty: window.innerHeight * 0.5,
+            stx: window.innerWidth * 0.5,
+            sty: window.innerHeight * 0.5,
+            vx: (Math.random() - 0.5) * 9,
+            vy: (Math.random() - 0.5) * 9,
+            phase: Math.random() * Math.PI * 2
+          });
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        const p = targetArr[i];
+        const t = pts[i % pts.length];
+        p.tx = t.x;
+        p.ty = t.y;
+        // 全屏散开：先朝随机屏幕位置扩散，再回聚到目标文字
+        p.stx = Math.random() * window.innerWidth;
+        p.sty = Math.random() * window.innerHeight;
+        p.vx += (Math.random() - 0.5) * 20;
+        p.vy += (Math.random() - 0.5) * 20;
+      }
+      welcomeAnim.scatterUntil = now + 800;
+      if (targetArr.length > pts.length + 220) {
+        targetArr.length = pts.length + 220;
+      }
+    }
+
+    function rebuildWelcomeParticleTargets(now) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const msg = welcomeWords[welcomeAnim.idx];
+      const btn = welcomeContinueWords[welcomeAnim.idx];
+      const msgPts = textToPointCloud(
+        msg,
+        Math.max(56, Math.floor(w * 0.052)),
+        w * 0.5,
+        h * 0.40,
+        w * 0.92,
+        5,
+        600,
+        0.9
+      );
+      const btnPts = textToPointCloud(
+        btn,
+        Math.max(34, Math.floor(w * 0.03)),
+        w * 0.5,
+        h * 0.64,
+        w * 0.42,
+        4,
+        650,
+        0.9
+      );
+      assignTargetsFromPoints(welcomeAnim.particles, msgPts, now);
+      assignTargetsFromPoints(welcomeAnim.buttonParticles, btnPts, now);
+      welcomeAnim.buttonBounds = {
+        x: w * 0.5 - Math.max(110, btn.length * 24),
+        y: h * 0.64 - 42,
+        w: Math.max(220, btn.length * 48),
+        h: 84
+      };
+      welcomeAnim.lastSwitch = now;
+    }
+
+    function langToStep2Word(lang) {
+      if (lang === "zh-TW") return "請選擇你的語言";
+      if (lang === "en") return "Please choose your language";
+      return "请选择你的语言";
+    }
+
+    function rebuildWelcomeStep2Targets(now, text) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const word = text || welcomeStep2Words[welcomeStep2Anim.idx];
+      const pts = textToPointCloud(
+        word,
+        Math.max(44, Math.floor(w * 0.038)),
+        w * 0.5,
+        h * 0.34,
+        w * 0.72,
+        5,
+        600,
+        0.9
+      );
+      assignTargetsFromPoints(welcomeStep2Anim.particles, pts, now);
+      // 第二页散开范围更小
+      for (let i = 0; i < welcomeStep2Anim.particles.length; i++) {
+        const p = welcomeStep2Anim.particles[i];
+        const rx = (Math.random() - 0.5) * w * 0.38;
+        const ry = (Math.random() - 0.5) * h * 0.22;
+        p.stx = w * 0.5 + rx;
+        p.sty = h * 0.34 + ry;
+      }
+      welcomeStep2Anim.scatterUntil = now + 700;
+      welcomeStep2Anim.lastSwitch = now;
+    }
+
+    function rebuildWelcomeStep2Static() {
+      welcomeStep2Static.length = 0;
+      for (const k of Object.keys(welcomeStep2HitBoxes)) delete welcomeStep2HitBoxes[k];
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const items = [
+        { text: "中文（简体）", x: w * 0.26, y: h * 0.52, kind: "lang-zh" },
+        { text: "中文（繁體）", x: w * 0.5, y: h * 0.52, kind: "lang-zh-TW" },
+        { text: "English", x: w * 0.74, y: h * 0.52, kind: "lang-en" },
+        { text: "开始制作", x: w * 0.5, y: h * 0.70, kind: "start" }
+      ];
+      for (const it of items) {
+        const pts = textToPointCloud(
+          it.text,
+          Math.max(it.kind === "start" ? 30 : 24, Math.floor(w * (it.kind === "start" ? 0.026 : 0.022))),
+          it.x,
+          it.y,
+          w * (it.kind === "start" ? 0.26 : 0.18),
+          4,
+          600,
+          0.9
+        );
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          welcomeStep2Static.push({
+            x: p.x,
+            y: p.y,
+            kind: it.kind,
+            phase: Math.random() * Math.PI * 2
+          });
+        }
+        if (pts.length > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (let i = 0; i < pts.length; i++) {
+            minX = Math.min(minX, pts[i].x);
+            minY = Math.min(minY, pts[i].y);
+            maxX = Math.max(maxX, pts[i].x);
+            maxY = Math.max(maxY, pts[i].y);
+          }
+          const pad = it.kind === "start" ? 24 : 16;
+          welcomeStep2HitBoxes[it.kind] = {
+            x: minX - pad,
+            y: minY - pad,
+            w: (maxX - minX) + pad * 2,
+            h: (maxY - minY) + pad * 2
+          };
+        }
+      }
+    }
+
+    function enterMainPageWithLang(lang) {
+      if (lang === "en") locale = "en";
+      else if (lang === "zh-TW") locale = "zh-TW";
+      else locale = "zh";
+      try {
+        localStorage.setItem("uiLang", locale);
+      } catch (_) {}
+      applyLocale();
+      welcomePhase = 0;
+      if (welcomeOverlay) {
+        welcomeOverlay.classList.add("hidden");
+        welcomeOverlay.style.display = "none";
+      }
+      const panelEl = document.querySelector(".panel");
+      const settingsBtnEl = document.getElementById("settingsToggle");
+      if (panelEl) panelEl.style.display = "";
+      if (settingsBtnEl) settingsBtnEl.style.display = "";
+    }
+
+    function selectWelcomeLang(lang) {
+      if (!lang) return;
+      welcomeStep2Anim.locked = true;
+      welcomeStep2Anim.lockedLang = lang;
+      rebuildWelcomeStep2Targets(performance.now(), langToStep2Word(lang));
+      if (welcomeLangBtns.length) {
+        welcomeLangBtns.forEach((b) => b.classList.remove("active"));
+        const btn = welcomeLangBtns.find((b) => b.getAttribute("data-welcome-lang") === lang);
+        if (btn) btn.classList.add("active");
+      }
+    }
+
+    function updateAndDrawWelcomeParticles(now) {
+      if (!welcomeOverlay || welcomeOverlay.classList.contains("hidden")) return;
+      if (welcomePhase !== 1) return;
+      if (!welcomeAnim.lastSwitch) {
+        rebuildWelcomeParticleTargets(now);
+      }
+      if (now - welcomeAnim.lastSwitch > 6000) {
+        welcomeAnim.idx = (welcomeAnim.idx + 1) % welcomeWords.length;
+        rebuildWelcomeParticleTargets(now);
+      }
+      const scatter = now < welcomeAnim.scatterUntil;
+      function stepAndDraw(arr, kind) {
+        for (let i = 0; i < arr.length; i++) {
+          const p = arr[i];
+          if (scatter) {
+            p.vx += (p.stx - p.x) * 0.010;
+            p.vy += (p.sty - p.y) * 0.010;
+          } else {
+            p.vx += (p.tx - p.x) * 0.010;
+            p.vy += (p.ty - p.y) * 0.010;
+          }
+          p.vx *= 0.86;
+          p.vy *= 0.86;
+          p.x += p.vx;
+          p.y += p.vy;
+          const pulse = 0.5 + 0.5 * Math.sin(now * 0.004 + p.phase);
+          if (kind === "btn") {
+            ctx.fillStyle = `rgba(${40 + pulse * 100}, ${180 + pulse * 40}, ${110 + pulse * 60}, 0.95)`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2.4 + pulse * 1.8, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = `rgba(${60 + pulse * 80}, ${210 + pulse * 25}, ${120 + pulse * 80}, 0.9)`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 2.1 + pulse * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+      stepAndDraw(welcomeAnim.particles, "msg");
+      stepAndDraw(welcomeAnim.buttonParticles, "btn");
+      if (welcomeAnim.buttonBounds) {
+        const b = welcomeAnim.buttonBounds;
+        ctx.save();
+        ctx.strokeStyle = "rgba(80,160,110,0.28)";
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.restore();
+      }
+    }
+
+    function updateAndDrawWelcomeStep2Particles(now) {
+      if (!welcomeOverlay || welcomeOverlay.classList.contains("hidden")) return;
+      if (welcomePhase !== 2) return;
+      if (!welcomeStep2Anim.lastSwitch) {
+        rebuildWelcomeStep2Targets(now);
+      }
+      if (!welcomeStep2Anim.locked && now - welcomeStep2Anim.lastSwitch > 3600) {
+        welcomeStep2Anim.idx = (welcomeStep2Anim.idx + 1) % welcomeStep2Words.length;
+        rebuildWelcomeStep2Targets(now);
+      }
+      const scatter = !welcomeStep2Anim.locked && now < welcomeStep2Anim.scatterUntil;
+      const arr = welcomeStep2Anim.particles;
+      for (let i = 0; i < arr.length; i++) {
+        const p = arr[i];
+        if (scatter) {
+          p.vx += (p.stx - p.x) * 0.009;
+          p.vy += (p.sty - p.y) * 0.009;
+        } else {
+          p.vx += (p.tx - p.x) * 0.013;
+          p.vy += (p.ty - p.y) * 0.013;
+        }
+        p.vx *= 0.87;
+        p.vy *= 0.87;
+        p.x += p.vx;
+        p.y += p.vy;
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.0036 + p.phase);
+        ctx.fillStyle = `rgba(${70 + pulse * 70}, ${205 + pulse * 35}, ${130 + pulse * 60}, 0.9)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.0 + pulse * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (welcomeStep2Static.length === 0) rebuildWelcomeStep2Static();
+      for (let i = 0; i < welcomeStep2Static.length; i++) {
+        const p = welcomeStep2Static[i];
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.004 + p.phase);
+        if (p.kind === "start") {
+          ctx.fillStyle = `rgba(${60 + pulse * 120}, ${200 + pulse * 40}, ${110 + pulse * 70}, 0.95)`;
+        } else {
+          const active = p.kind === `lang-${welcomeStep2Anim.lockedLang || "zh"}`;
+          ctx.fillStyle = active
+            ? `rgba(${70 + pulse * 120}, ${205 + pulse * 40}, ${130 + pulse * 70}, 0.95)`
+            : `rgba(${80 + pulse * 60}, ${190 + pulse * 30}, ${120 + pulse * 40}, 0.65)`;
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.9 + (p.kind === "start" ? 1.8 : 1.2) * pulse, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function getExportRects() {
+      const panelEl = document.querySelector(".panel");
+      let leftCss = 0;
+      if (panelEl) {
+        const rect = panelEl.getBoundingClientRect();
+        leftCss = rect.right;
+      }
+      const wCss = Math.max(1, window.innerWidth - leftCss);
+      const hCss = Math.max(1, window.innerHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      return {
+        cssLeft: leftCss,
+        cssWidth: wCss,
+        cssHeight: hCss,
+        pxX: Math.floor(leftCss * dpr),
+        pxY: 0,
+        pxW: Math.floor(wCss * dpr),
+        pxH: Math.floor(hCss * dpr),
+        dpr
+      };
+    }
+
+    function buildCroppedPreviewDataURL() {
+      const rect = getExportRects();
+      const prevCanvas = document.createElement("canvas");
+      const maxPrevW = 260;
+      const scale = Math.min(1, maxPrevW / rect.cssWidth);
+      prevCanvas.width = Math.max(1, Math.floor(rect.cssWidth * scale));
+      prevCanvas.height = Math.max(1, Math.floor(rect.cssHeight * scale));
+      const pctx = prevCanvas.getContext("2d");
+      pctx.imageSmoothingEnabled = true;
+      pctx.drawImage(
+        canvas,
+        rect.pxX,
+        rect.pxY,
+        rect.pxW,
+        rect.pxH,
+        0,
+        0,
+        prevCanvas.width,
+        prevCanvas.height
+      );
+      return prevCanvas.toDataURL("image/png");
+    }
+
+    function buildTransparentPreviewDataURL() {
+      const rect = getExportRects();
+      const maxPrevW = 260;
+      const scale = Math.min(1, maxPrevW / rect.cssWidth);
+      const w = Math.max(1, Math.floor(rect.cssWidth * scale));
+      const h = Math.max(1, Math.floor(rect.cssHeight * scale));
+      const prev = document.createElement("canvas");
+      prev.width = w;
+      prev.height = h;
+      const ctx2 = prev.getContext("2d");
+      ctx2.clearRect(0, 0, w, h);
+      const baseSize = Number(sizeInput.value) * scale;
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const q = project3D(p.x, p.y, p.z);
+        if (!q) continue;
+        const sxCss = q.sx - rect.cssLeft;
+        const syCss = q.sy;
+        if (sxCss < 0 || sxCss > rect.cssWidth || syCss < 0 || syCss > rect.cssHeight) continue;
+        const sx = sxCss * scale;
+        const sy = syCss * scale;
+        const radius = clamp(baseSize * p.radiusMul * q.perspective, 0.15 * scale, 3.4 * scale);
+        const alpha = clamp(p.alpha * (0.75 + q.perspective * 0.45), 0.06, 0.98);
+        ctx2.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${alpha})`;
+        ctx2.beginPath();
+        ctx2.arc(sx, sy, radius, 0, Math.PI * 2);
+        ctx2.fill();
+      }
+      return prev.toDataURL("image/png");
+    }
+
+    function resizeCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // 右侧效果区中心：以左侧控制面板右边缘为起点，取右侧区域的中点
+      const panelEl = document.querySelector(".panel");
+      let left = 0;
+      if (panelEl) {
+        const rect = panelEl.getBoundingClientRect();
+        left = rect.right;
+      }
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const rightWidth = Math.max(0, w - left);
+      view.centerX = left + rightWidth * 0.5;
+      view.centerY = h * 0.5;
+      if (welcomePhase === 1) {
+        welcomeAnim.lastSwitch = 0;
+      }
+    }
+
+    function createFallbackImage() {
+      const c = document.createElement("canvas");
+      c.width = 360; c.height = 340;
+      const cctx = c.getContext("2d");
+      cctx.fillStyle = "#fff";
+      cctx.fillRect(0, 0, c.width, c.height);
+      cctx.strokeStyle = "#9ad9aa";
+      cctx.lineWidth = 3;
+      cctx.beginPath();
+      cctx.arc(c.width / 2, 170, 46, 0, Math.PI * 2);
+      cctx.stroke();
+      cctx.fillStyle = "#8ad09f";
+      cctx.beginPath();
+      cctx.arc(c.width / 2, 170, 22, 0, Math.PI * 2);
+      cctx.fill();
+      const img = new Image();
+      img.src = c.toDataURL("image/png");
+      return img;
+    }
+
+    const TEXT_FONT_FAMILIES = {
+      system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif',
+      pingfang: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+      yahei: '"Microsoft YaHei", "PingFang SC", sans-serif',
+      songti: '"Songti SC", "SimSun", "Songti TC", "PMingLiU", serif',
+      kaiti: '"KaiTi", "Kaiti SC", "STKaiti", serif',
+      heiti: '"Heiti SC", "SimHei", "PingFang SC", sans-serif',
+      mono: '"SF Mono", Monaco, Menlo, Consolas, "Courier New", monospace',
+      serif: 'Georgia, "Times New Roman", "Songti SC", "SimSun", serif',
+      rounded: '"Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic Round", "PingFang SC", sans-serif',
+      arial: 'Arial, "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", sans-serif',
+      impact: 'Impact, "Arial Black", "PingFang SC", sans-serif'
+    };
+
+    function resolveTextFontFamily(key) {
+      return TEXT_FONT_FAMILIES[key] || TEXT_FONT_FAMILIES.system;
+    }
+
+    function createTextImage(text, fontSize, familyKey, styleOptions) {
+      const raw = (text || "").trim();
+      if (!raw) return null;
+      const lines = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      const displayLines = lines.length ? lines : [raw];
+      const pad = 28;
+      const fontFamily = resolveTextFontFamily(familyKey || "system");
+      const opts = styleOptions || {};
+      const bold = !!opts.bold;
+      const italic = !!opts.italic;
+      const underline = !!opts.underline;
+      const letterSpacing = Number(opts.letterSpacing) || 0;
+      const fontExpr = `${italic ? "italic " : ""}${bold ? "700" : "400"} ${fontSize}px ${fontFamily}`;
+      const measure = document.createElement("canvas").getContext("2d");
+      measure.font = fontExpr;
+      function lineWidthOf(line) {
+        if (!line) return 0;
+        let width = 0;
+        for (let i = 0; i < line.length; i++) {
+          width += measure.measureText(line[i]).width;
+        }
+        if (line.length > 1) width += letterSpacing * (line.length - 1);
+        return width;
+      }
+      let maxW = 0;
+      for (let i = 0; i < displayLines.length; i++) {
+        maxW = Math.max(maxW, lineWidthOf(displayLines[i]));
+      }
+      const lineH = fontSize * 1.25;
+      const tw = Math.ceil(maxW + pad * 2);
+      const th = Math.ceil(displayLines.length * lineH + pad * 2 + (underline ? 6 : 0));
+      const c = document.createElement("canvas");
+      c.width = Math.max(tw, 80);
+      c.height = Math.max(th, 48);
+      const cctx = c.getContext("2d");
+      cctx.fillStyle = "#ffffff";
+      cctx.fillRect(0, 0, c.width, c.height);
+      cctx.fillStyle = "#1e1e1e";
+      cctx.font = fontExpr;
+      cctx.textAlign = "left";
+      cctx.textBaseline = "middle";
+      const cy0 = pad + lineH / 2;
+      for (let i = 0; i < displayLines.length; i++) {
+        const line = displayLines[i];
+        const y = cy0 + i * lineH;
+        const lineW = lineWidthOf(line);
+        let x = (c.width - lineW) * 0.5;
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j];
+          cctx.fillText(ch, x, y);
+          x += measure.measureText(ch).width + letterSpacing;
+        }
+        if (underline) {
+          const uy = y + fontSize * 0.42;
+          cctx.strokeStyle = "#1e1e1e";
+          cctx.lineWidth = Math.max(1, fontSize * 0.06);
+          cctx.beginPath();
+          cctx.moveTo((c.width - lineW) * 0.5, uy);
+          cctx.lineTo((c.width + lineW) * 0.5, uy);
+          cctx.stroke();
+        }
+      }
+      const img = new Image();
+      img.src = c.toDataURL("image/png");
+      return img;
+    }
+
+    function saveTextFontFamily() {
+      try {
+        if (textFontFamilySelect) localStorage.setItem("textFontFamily", textFontFamilySelect.value);
+      } catch (_) {}
+    }
+
+    function saveTextStyleSettings() {
+      try {
+        if (textBoldInput) localStorage.setItem("textStyleBold", textBoldInput.checked ? "1" : "0");
+        if (textItalicInput) localStorage.setItem("textStyleItalic", textItalicInput.checked ? "1" : "0");
+        if (textUnderlineInput) localStorage.setItem("textStyleUnderline", textUnderlineInput.checked ? "1" : "0");
+        if (textLetterSpacingInput) localStorage.setItem("textLetterSpacing", textLetterSpacingInput.value);
+      } catch (_) {}
+    }
+
+    function onTextStyleChange() {
+      saveTextStyleSettings();
+      updateOutputs();
+      if (textInput && textInput.value.trim()) applyTextParticles();
+    }
+
+    function onTextFontFamilyChange() {
+      saveTextFontFamily();
+      if (textInput && textInput.value.trim()) applyTextParticles();
+    }
+
+    function applyTextParticles() {
+      const fs = Number(textFontSizeInput.value);
+      const fk = textFontFamilySelect ? textFontFamilySelect.value : "system";
+      const img = createTextImage(textInput.value, fs, fk, {
+        bold: textBoldInput ? textBoldInput.checked : true,
+        italic: textItalicInput ? textItalicInput.checked : false,
+        underline: textUnderlineInput ? textUnderlineInput.checked : false,
+        letterSpacing: textLetterSpacingInput ? Number(textLetterSpacingInput.value) : 0
+      });
+      if (!img) return;
+      img.onload = () => {
+        currentImage = img;
+        rebuild();
+      };
+    }
+
+    function randomScatter(scale) {
+      const radius = scale * (0.8 + Math.random() * 1.25);
+      const a = Math.random() * Math.PI * 2;
+      const b = (Math.random() - 0.5) * Math.PI;
+      return {
+        x: Math.cos(a) * Math.cos(b) * radius + (Math.random() - 0.5) * scale * 0.8,
+        y: Math.sin(b) * radius + (Math.random() - 0.5) * scale * 0.8,
+        z: Math.sin(a) * Math.cos(b) * radius + (Math.random() - 0.5) * scale
+      };
+    }
+
+    function buildParticlesFromImage(img) {
+      particles.length = 0;
+      const step = Number(stepInput.value);
+      const depthStrength = Number(depthInput.value);
+      const whiteThreshold = Number(thresholdInput.value);
+      const tint = hexToRgb(particleColorInput.value);
+
+      const maxSide = 680;
+      const scale = Math.min(maxSide / img.width, maxSide / img.height, 1);
+      const w = Math.max(2, Math.floor(img.width * scale));
+      const h = Math.max(2, Math.floor(img.height * scale));
+      off.width = w; off.height = h;
+
+      offCtx.fillStyle = "#fff";
+      offCtx.fillRect(0, 0, w, h);
+      offCtx.drawImage(img, 0, 0, w, h);
+      const { data } = offCtx.getImageData(0, 0, w, h);
+      const cx = w / 2;
+      const cy = h / 2;
+      const areaScale = Math.max(w, h);
+
+      const mask = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const a = data[i + 3] / 255;
+          const l = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          if (a > 0.08 && l < whiteThreshold) mask[y * w + x] = 1;
+        }
+      }
+
+      const sat = new Uint32Array((w + 1) * (h + 1));
+      for (let y = 1; y <= h; y++) {
+        let rowSum = 0;
+        for (let x = 1; x <= w; x++) {
+          rowSum += mask[(y - 1) * w + (x - 1)];
+          sat[y * (w + 1) + x] = sat[(y - 1) * (w + 1) + x] + rowSum;
+        }
+      }
+      function localDensity(px, py, r) {
+        const x0 = clamp(px - r, 0, w - 1);
+        const y0 = clamp(py - r, 0, h - 1);
+        const x1 = clamp(px + r, 0, w - 1);
+        const y1 = clamp(py + r, 0, h - 1);
+        const ax = x0, ay = y0, bx = x1 + 1, by = y1 + 1;
+        const sum = sat[by * (w + 1) + bx] - sat[ay * (w + 1) + bx] - sat[by * (w + 1) + ax] + sat[ay * (w + 1) + ax];
+        const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+        return area > 0 ? sum / area : 0;
+      }
+
+      for (let y = 0; y < h; y += step) {
+        for (let x = 0; x < w; x += step) {
+          const i = (y * w + x) * 4;
+          const a = data[i + 3] / 255;
+          if (a < 0.08) continue;
+          const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          if (luma >= whiteThreshold) continue;
+
+          const darkness = clamp((255 - luma) / 255, 0, 1);
+          if (Math.random() > 0.35 + darkness * 0.75) continue;
+
+          const density = localDensity(x, y, Math.max(4, step * 3));
+          const thickness = clamp(Math.pow(density, 1.1) * 0.45, 0.02, 1.25);
+          const relief = (darkness - 0.5) * depthStrength * 0.55;
+          const target = { x: x - cx, y: y - cy, z: relief };
+
+          const start = randomScatter(areaScale);
+          const thicknessDepth = depthStrength * thickness;
+          // 深度方向：在一段区间内均匀随机，避免粒子挤在少数几个 z 平面上
+          const depthSpan =
+            thicknessDepth * 0.58 +
+            depthStrength * 0.022 * (0.35 + thickness);
+          const shells = 1 + (thickness > 0.55 ? 1 : 0) + (thickness > 0.88 ? 1 : 0);
+
+          for (let s = 0; s < shells; s++) {
+            const zJitter = (Math.random() * 2 - 1) * depthSpan;
+            const zLayer = relief * 0.28 + zJitter;
+            const gv = 0.78 + Math.random() * 0.34;
+            const pr = clamp(Math.round(tint.r * gv), 0, 255);
+            const pg = clamp(Math.round(tint.g * (0.85 + Math.random() * 0.3)), 0, 255);
+            const pb = clamp(Math.round(tint.b * gv), 0, 255);
+            particles.push({
+              sx: start.x, sy: start.y, sz: start.z,
+              tx: target.x, ty: target.y, tz: zLayer,
+              x: start.x, y: start.y, z: start.z,
+              vx: (Math.random() - 0.5) * 0.9,
+              vy: (Math.random() - 0.5) * 0.9,
+              vz: (Math.random() - 0.5) * 0.9,
+              r: pr, g: pg, b: pb,
+              alpha: 0.14 + darkness * 0.68 + thickness * 0.22,
+              radiusMul: 0.7 + darkness * 0.45 + thickness * 0.55
+            });
+          }
+        }
+      }
+      explosionStart = performance.now();
+    }
+
+    function applyParticleMotion(now) {
+      const t = clamp((now - explosionStart) / explodeDuration, 0, 1);
+      const gather = easeOutCubic(t);
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        if (p.clickBurstUntil != null) {
+          if (now < p.clickBurstUntil) {
+            p.vx *= 0.89;
+            p.vy *= 0.89;
+            p.vz *= 0.89;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.z += p.vz;
+            continue;
+          }
+          p.clickBurstUntil = null;
+          p.vx *= 0.35;
+          p.vy *= 0.35;
+          p.vz *= 0.35;
+        }
+        const ix = p.sx + (p.tx - p.sx) * gather;
+        const iy = p.sy + (p.ty - p.sy) * gather;
+        const iz = p.sz + (p.tz - p.sz) * gather;
+        p.vx += (ix - p.x) * 0.038;
+        p.vy += (iy - p.y) * 0.038;
+        p.vz += (iz - p.z) * 0.038;
+        p.vx *= 0.86; p.vy *= 0.86; p.vz *= 0.86;
+        p.x += p.vx; p.y += p.vy; p.z += p.vz;
+      }
+    }
+
+    function project3D(x, y, z) {
+      const worldScale = 1.22;
+      const scale = worldScale * view.modelScale;
+      x *= scale;
+      y *= scale;
+      z *= scale;
+      const cosY = Math.cos(view.rotY), sinY = Math.sin(view.rotY);
+      const cosX = Math.cos(view.rotX), sinX = Math.sin(view.rotX);
+      const x1 = x * cosY - z * sinY;
+      const z1 = x * sinY + z * cosY;
+      const y2 = y * cosX - z1 * sinX;
+      const z2 = y * sinX + z1 * cosX;
+      const cam = view.cameraBase;
+      const depth = z2 + cam;
+      if (depth <= 1) return null;
+      const p = cam / depth;
+      return {
+        sx: x1 * p + view.centerX + view.panX,
+        sy: y2 * p + view.centerY + view.panY,
+        perspective: p,
+        depth
+      };
+    }
+
+    function burstAtScreen(clientX, clientY) {
+      if (particles.length === 0) return;
+      const rot = Math.random() * Math.PI * 2;
+      const cosR = Math.cos(rot);
+      const sinR = Math.sin(rot);
+      const rx = 0.58 + Math.random() * 0.95;
+      const ry = 0.58 + Math.random() * 0.95;
+      const sigma = CLICK_BURST_SIGMA_PX;
+      const sigma2 = 2 * sigma * sigma;
+      const hit = [];
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const q = project3D(p.x, p.y, p.z);
+        if (!q) continue;
+        const dx = q.sx - clientX;
+        const dy = q.sy - clientY;
+        const lx = (dx * cosR + dy * sinR) / rx;
+        const ly = (-dx * sinR + dy * cosR) / ry;
+        const d = Math.hypot(lx, ly);
+        const gauss = Math.exp(-(d * d) / sigma2);
+        if (gauss < 0.016) continue;
+        if (Math.random() > gauss * 0.88 + 0.1) continue;
+        const strength = gauss * (0.4 + Math.random() * 0.95);
+        hit.push({ p, strength });
+      }
+      if (hit.length === 0) return;
+      let cx = 0;
+      let cy = 0;
+      let cz = 0;
+      let wsum = 0;
+      for (let i = 0; i < hit.length; i++) {
+        const { p, strength } = hit[i];
+        cx += p.x * strength;
+        cy += p.y * strength;
+        cz += p.z * strength;
+        wsum += strength;
+      }
+      const inv = 1 / wsum;
+      cx *= inv;
+      cy *= inv;
+      cz *= inv;
+      const end = performance.now() + CLICK_BURST_MS;
+      for (let i = 0; i < hit.length; i++) {
+        const { p, strength } = hit[i];
+        let dx = p.x - cx;
+        let dy = p.y - cy;
+        let dz = p.z - cz;
+        let len = Math.hypot(dx, dy, dz);
+        if (len < 1e-4) {
+          dx = Math.random() - 0.5;
+          dy = Math.random() - 0.5;
+          dz = Math.random() - 0.5;
+          len = Math.hypot(dx, dy, dz);
+        }
+        dx /= len;
+        dy /= len;
+        dz /= len;
+        dx += (Math.random() - 0.5) * 0.65;
+        dy += (Math.random() - 0.5) * 0.65;
+        dz += (Math.random() - 0.5) * 0.65;
+        len = Math.hypot(dx, dy, dz);
+        if (len < 1e-6) continue;
+        dx /= len;
+        dy /= len;
+        dz /= len;
+        const imp = CLICK_BURST_IMPULSE * strength;
+        p.vx += dx * imp;
+        p.vy += dy * imp;
+        p.vz += dz * imp;
+        p.clickBurstUntil = end;
+      }
+    }
+
+    function render(now) {
+      drawBackground();
+      updateAndDrawWelcomeParticles(now);
+      updateAndDrawWelcomeStep2Particles(now);
+      if (particles.length > 0) {
+        if (!paused) applyParticleMotion(now);
+        const baseSize = Number(sizeInput.value);
+        const projected = [];
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          const q = project3D(p.x, p.y, p.z);
+          if (!q) continue;
+          projected.push({
+            sx: q.sx,
+            sy: q.sy,
+            depth: q.depth,
+            radius: clamp(baseSize * p.radiusMul * q.perspective, 0.15, 3.4),
+            alpha: clamp(p.alpha * (0.75 + q.perspective * 0.45), 0.06, 0.98),
+            r: p.r, g: p.g, b: p.b
+          });
+        }
+        projected.sort((a, b) => b.depth - a.depth);
+        for (let i = 0; i < projected.length; i++) {
+          const d = projected[i];
+          ctx.fillStyle = `rgba(${d.r}, ${d.g}, ${d.b}, ${d.alpha})`;
+          ctx.beginPath();
+          ctx.arc(d.sx, d.sy, d.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      requestAnimationFrame(render);
+    }
+
+    function rebuild() {
+      if (!currentImage) return;
+      buildParticlesFromImage(currentImage);
+    }
+
+    function handleUpload(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => { currentImage = img; rebuild(); };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function pickRecordMimeType() {
+      const candidates = [
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+        "video/mp4"
+      ];
+      if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+      for (let i = 0; i < candidates.length; i++) {
+        if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+      }
+      return "";
+    }
+
+    function updateRecordUI() {
+      const rec = mediaRecorder && mediaRecorder.state === "recording";
+      if (startRecordBtn) startRecordBtn.disabled = !!rec;
+      if (stopRecordBtn) stopRecordBtn.disabled = !rec;
+      if (recordStatusEl) {
+        recordStatusEl.textContent = rec ? t("recordRec") : t("recordIdle");
+        recordStatusEl.style.color = rec ? "#c43d3d" : "#5a8f68";
+      }
+    }
+
+    function startScreenRecord() {
+      if (!canvas.captureStream) {
+        alert("当前浏览器不支持从画布录制（canvas.captureStream）。");
+        return;
+      }
+      if (typeof MediaRecorder === "undefined") {
+        alert("当前浏览器不支持 MediaRecorder，无法录制视频。");
+        return;
+      }
+      const mime = pickRecordMimeType();
+      if (!mime) {
+        alert("找不到可用的视频编码格式，请换用 Chrome / Edge / Firefox 等浏览器再试。");
+        return;
+      }
+      if (mediaRecorder && mediaRecorder.state === "recording") return;
+
+      recordChunks = [];
+      canvasStream = canvas.captureStream(RECORD_FPS);
+      try {
+        mediaRecorder = new MediaRecorder(canvasStream, { mimeType: mime });
+      } catch (_) {
+        mediaRecorder = new MediaRecorder(canvasStream);
+      }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordChunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const type = (mediaRecorder && mediaRecorder.mimeType) || mime || "video/webm";
+        const blob = new Blob(recordChunks, { type });
+        const ext = type.indexOf("mp4") !== -1 ? "mp4" : "webm";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `particle-3d-${Date.now()}.${ext}`;
+        a.rel = "noopener";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2500);
+        if (canvasStream) {
+          canvasStream.getTracks().forEach((t) => t.stop());
+          canvasStream = null;
+        }
+        mediaRecorder = null;
+        recordChunks = [];
+        updateRecordUI();
+      };
+      mediaRecorder.start(250);
+      updateRecordUI();
+    }
+
+    function stopScreenRecord() {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+      }
+    }
+
+    function openSaveDialog() {
+      const modal = document.getElementById("saveModal");
+      const imgEl = document.getElementById("savePreviewImg");
+      const bgEl = document.getElementById("savePreviewBg");
+      const fmtSel = document.getElementById("saveFormat");
+      const pngOpts = document.getElementById("savePngOptions");
+      const transparentChk = document.getElementById("saveTransparent");
+      if (!modal || !imgEl || !fmtSel || !pngOpts || !transparentChk || !bgEl) return;
+      try {
+        imgEl.src = buildCroppedPreviewDataURL();
+      } catch (_) {
+        imgEl.removeAttribute("src");
+      }
+      fmtSel.value = "png";
+      pngOpts.style.display = "";
+      transparentChk.checked = false;
+      bgEl.classList.remove("checker");
+      modal.classList.add("show");
+    }
+
+    function performSaveFromDialog() {
+      const fmtSel = document.getElementById("saveFormat");
+      const transparentChk = document.getElementById("saveTransparent");
+      if (!fmtSel) return;
+      const fmt = fmtSel.value;
+      const transparent = !!(transparentChk && transparentChk.checked);
+      const stamp = Date.now();
+      const rect = getExportRects();
+      // 非透明导出：直接裁剪当前画布右侧预览区
+      if (fmt === "jpeg" || !transparent) {
+        const crop = document.createElement("canvas");
+        crop.width = rect.pxW;
+        crop.height = rect.pxH;
+        const cctx = crop.getContext("2d");
+        cctx.drawImage(
+          canvas,
+          rect.pxX,
+          rect.pxY,
+          rect.pxW,
+          rect.pxH,
+          0,
+          0,
+          rect.pxW,
+          rect.pxH
+        );
+        const mime = fmt === "jpeg" ? "image/jpeg" : "image/png";
+        const ext = fmt === "jpeg" ? "jpg" : "png";
+        crop.toBlob((blob) => {
+          if (!blob) return;
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `particle-3d-${stamp}.${ext}`;
+          a.rel = "noopener";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        }, mime, fmt === "jpeg" ? 0.92 : undefined);
+        return;
+      }
+      // 透明 PNG：只重绘粒子，不画背景，范围同右侧预览区
+      const out = document.createElement("canvas");
+      out.width = Math.max(1, Math.floor(rect.cssWidth));
+      out.height = Math.max(1, Math.floor(rect.cssHeight));
+      const octx = out.getContext("2d");
+      octx.clearRect(0, 0, out.width, out.height);
+      const baseSize = Number(sizeInput.value);
+      const projected = [];
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const q = project3D(p.x, p.y, p.z);
+        if (!q) continue;
+        const sx = q.sx - rect.cssLeft;
+        const sy = q.sy;
+        if (sx < 0 || sx > rect.cssWidth || sy < 0 || sy > rect.cssHeight) continue;
+        projected.push({
+          sx,
+          sy,
+          radius: clamp(baseSize * p.radiusMul * q.perspective, 0.15, 3.4),
+          alpha: clamp(p.alpha * (0.75 + q.perspective * 0.45), 0.06, 0.98),
+          r: p.r,
+          g: p.g,
+          b: p.b
+        });
+      }
+      for (let i = 0; i < projected.length; i++) {
+        const d = projected[i];
+        octx.fillStyle = `rgba(${d.r}, ${d.g}, ${d.b}, ${d.alpha})`;
+        octx.beginPath();
+        octx.arc(d.sx, d.sy, d.radius, 0, Math.PI * 2);
+        octx.fill();
+      }
+      out.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `particle-3d-${stamp}.png`;
+        a.rel = "noopener";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      }, "image/png");
+    }
+
+    function bindEvents() {
+      if (settingsToggle && settingsPanel && settingsClose) {
+        settingsToggle.addEventListener("click", () => {
+          const show = settingsPanel.style.display !== "block";
+          settingsPanel.style.display = show ? "block" : "none";
+          if (show && settingsLocale) {
+            settingsLocale.value = locale;
+          }
+        });
+        settingsClose.addEventListener("click", () => {
+          settingsPanel.style.display = "none";
+        });
+      }
+      if (settingsLocale) {
+        settingsLocale.addEventListener("change", () => {
+          const v = settingsLocale.value;
+          if (v !== "zh" && v !== "en" && v !== "zh-TW") return;
+          locale = v;
+          try {
+            localStorage.setItem("uiLang", locale);
+          } catch (_) {}
+          applyLocale();
+          if (localeSelect) localeSelect.value = locale;
+        });
+      }
+      if (uiScaleInput) {
+        uiScaleInput.addEventListener("input", () => {
+          const v = Number(uiScaleInput.value) || 100;
+          const s = Math.max(0.7, Math.min(1.4, v / 100));
+          document.documentElement.style.setProperty("--ui-scale", String(s));
+        });
+      }
+      if (themeMainColorInput) {
+        themeMainColorInput.addEventListener("input", () => {
+          document.documentElement.style.setProperty("--theme-main", themeMainColorInput.value || "#1a5b2b");
+        });
+      }
+      if (themeBorderColorInput) {
+        themeBorderColorInput.addEventListener("input", () => {
+          document.documentElement.style.setProperty("--theme-border", themeBorderColorInput.value || "#d5ead9");
+        });
+      }
+
+      if (welcomeOverlay) {
+        welcomeOverlay.addEventListener("pointerdown", (e) => {
+          const x = e.clientX;
+          const y = e.clientY;
+          if (welcomePhase === 1 && welcomeAnim.buttonBounds) {
+            const b = welcomeAnim.buttonBounds;
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+              e.preventDefault();
+              e.stopPropagation();
+              welcomePhase = 2;
+              if (welcomeStep1) welcomeStep1.style.display = "none";
+              if (welcomeStep2) welcomeStep2.style.display = "";
+              rebuildWelcomeStep2Static();
+              welcomeStep2Anim.locked = false;
+              welcomeStep2Anim.lockedLang = "zh";
+              welcomeStep2Anim.lastSwitch = 0;
+              return;
+            }
+          }
+          if (welcomePhase === 2) {
+            for (const key of Object.keys(welcomeStep2HitBoxes)) {
+              const b = welcomeStep2HitBoxes[key];
+              if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (key === "lang-zh") selectWelcomeLang("zh");
+                else if (key === "lang-zh-TW") selectWelcomeLang("zh-TW");
+                else if (key === "lang-en") selectWelcomeLang("en");
+                else if (key === "start") enterMainPageWithLang(welcomeStep2Anim.lockedLang || "zh");
+                return;
+              }
+            }
+          }
+        });
+        if (welcomeStartBtn) {
+          welcomeStartBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            enterMainPageWithLang(welcomeStep2Anim.lockedLang || "zh");
+          });
+        }
+      }
+
+      if (welcomeLangBtns.length) {
+        welcomeLangBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const lang = btn.getAttribute("data-welcome-lang") || "zh";
+            selectWelcomeLang(lang);
+          });
+        });
+      }
+
+      if (localeSelect) {
+        localeSelect.addEventListener("change", () => {
+          const v = localeSelect.value;
+          if (v !== "zh" && v !== "en" && v !== "zh-TW") return;
+          locale = v;
+          try {
+            localStorage.setItem("uiLang", locale);
+          } catch (_) {}
+          applyLocale();
+        });
+      }
+
+      uploadInput.addEventListener("change", () => {
+        const file = uploadInput.files && uploadInput.files[0];
+        const nameEl = document.getElementById("uploadName");
+        if (file) {
+          if (nameEl) nameEl.textContent = file.name;
+          handleUpload(file);
+        } else if (nameEl) {
+          nameEl.textContent = t("uploadNone");
+        }
+      });
+      const uploadTrigger = document.getElementById("uploadTrigger");
+      if (uploadTrigger) {
+        uploadTrigger.addEventListener("click", () => {
+          uploadInput.click();
+        });
+      }
+
+      // 保存图片弹窗
+      const saveModal = document.getElementById("saveModal");
+      const saveClose = document.getElementById("saveDialogClose");
+      const saveCancel = document.getElementById("saveDialogCancel");
+      const saveOk = document.getElementById("saveDialogConfirm");
+      const saveFormatSel = document.getElementById("saveFormat");
+      const savePngOptions = document.getElementById("savePngOptions");
+      const saveTransparent = document.getElementById("saveTransparent");
+      const savePreviewBg = document.getElementById("savePreviewBg");
+      const saveZoomBtn = document.getElementById("saveZoomBtn");
+      const savePreviewImg = document.getElementById("savePreviewImg");
+
+      function closeSaveModal() {
+        if (saveModal) saveModal.classList.remove("show");
+        if (savePreviewImg) savePreviewImg.style.transform = "";
+      }
+      if (saveClose) saveClose.addEventListener("click", closeSaveModal);
+      if (saveCancel) saveCancel.addEventListener("click", closeSaveModal);
+      if (saveOk) {
+        saveOk.addEventListener("click", () => {
+          performSaveFromDialog();
+          closeSaveModal();
+        });
+      }
+      if (saveFormatSel && savePngOptions) {
+        saveFormatSel.addEventListener("change", () => {
+          const isPng = saveFormatSel.value === "png";
+          savePngOptions.style.display = isPng ? "flex" : "none";
+        });
+      }
+      if (saveTransparent && savePreviewBg) {
+        saveTransparent.addEventListener("change", () => {
+          if (saveTransparent.checked) {
+            savePreviewBg.classList.add("checker");
+            try {
+              const imgEl = document.getElementById("savePreviewImg");
+              if (imgEl) imgEl.src = buildTransparentPreviewDataURL();
+            } catch (_) {}
+          } else {
+            savePreviewBg.classList.remove("checker");
+            try {
+              const imgEl = document.getElementById("savePreviewImg");
+              if (imgEl) imgEl.src = buildCroppedPreviewDataURL();
+            } catch (_) {}
+          }
+        });
+      }
+      if (saveZoomBtn && savePreviewImg) {
+        let zoomed = false;
+        saveZoomBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          zoomed = !zoomed;
+          savePreviewImg.style.transform = zoomed ? "scale(1.5)" : "";
+        });
+      }
+
+      [stepInput, depthInput, thresholdInput].forEach((el) => {
+        el.addEventListener("input", updateOutputs);
+        el.addEventListener("change", rebuild);
+      });
+      [sizeInput, fovInput, particleColorInput].forEach((el) => {
+        el.addEventListener("input", updateOutputs);
+        el.addEventListener("change", rebuild);
+      });
+
+      bgModeSelect.addEventListener("change", updateOutputs);
+      [bgColor1Input, bgColor2Input, bgAngleInput].forEach((el) => {
+        el.addEventListener("input", updateOutputs);
+        el.addEventListener("change", updateOutputs);
+      });
+
+      textFontSizeInput.addEventListener("input", updateOutputs);
+      textFontSizeInput.addEventListener("change", () => {
+        if (textInput && textInput.value.trim()) applyTextParticles();
+      });
+      if (textFontFamilySelect) textFontFamilySelect.addEventListener("change", onTextFontFamilyChange);
+      if (textBoldInput) textBoldInput.addEventListener("change", onTextStyleChange);
+      if (textItalicInput) textItalicInput.addEventListener("change", onTextStyleChange);
+      if (textUnderlineInput) textUnderlineInput.addEventListener("change", onTextStyleChange);
+      if (textLetterSpacingInput) {
+        textLetterSpacingInput.addEventListener("input", () => {
+          saveTextStyleSettings();
+          updateOutputs();
+        });
+        textLetterSpacingInput.addEventListener("change", onTextStyleChange);
+      }
+      applyTextBtn.addEventListener("click", applyTextParticles);
+      textUndoBtn.addEventListener("click", undoText);
+      textRedoBtn.addEventListener("click", redoText);
+      textClearBtn.addEventListener("click", clearText);
+      textInput.addEventListener("input", () => {
+        pushTextHistory(textInput.value);
+        updateTextMeta();
+        syncTextButtons();
+      });
+      textInput.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+          e.preventDefault();
+          if (e.shiftKey) {
+            redoText();
+          } else {
+            undoText();
+          }
+          return;
+        }
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          applyTextParticles();
+        }
+      });
+
+      rebuildBtn.addEventListener("click", rebuild);
+      saveImageBtn.addEventListener("click", openSaveDialog);
+      startRecordBtn.addEventListener("click", startScreenRecord);
+      stopRecordBtn.addEventListener("click", stopScreenRecord);
+      explodeBtn.addEventListener("click", () => {
+        if (particles.length === 0) return;
+        const radius = Math.max(off.width, off.height);
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          const s = randomScatter(radius);
+          p.sx = s.x; p.sy = s.y; p.sz = s.z;
+          p.x = s.x; p.y = s.y; p.z = s.z;
+          p.vx = (Math.random() - 0.5) * 1.1;
+          p.vy = (Math.random() - 0.5) * 1.1;
+          p.vz = (Math.random() - 0.5) * 1.1;
+        }
+        explosionStart = performance.now();
+      });
+
+      resetViewBtn.addEventListener("click", () => {
+        view.rotX = -0.18;
+        view.rotY = 0.45;
+        view.modelScale = 1;
+        view.panX = 0;
+        view.panY = 0;
+      });
+
+      canvas.addEventListener("pointerdown", (e) => {
+        view.ptrDown = true;
+        view.ptrMoved = false;
+        view.ptrX0 = e.clientX;
+        view.ptrY0 = e.clientY;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        view.dragging = false;
+        view.dragMode = e.ctrlKey ? "pan" : "rotate";
+        canvas.setPointerCapture(e.pointerId);
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!view.ptrDown) return;
+        const ox = e.clientX - view.ptrX0;
+        const oy = e.clientY - view.ptrY0;
+        if (!view.ptrMoved && ox * ox + oy * oy > CLICK_BURST_DRAG_PX * CLICK_BURST_DRAG_PX) {
+          view.ptrMoved = true;
+          view.dragging = true;
+          canvas.classList.add("dragging");
+        }
+        if (!view.dragging) return;
+        const dx = e.clientX - view.lastX;
+        const dy = e.clientY - view.lastY;
+        view.lastX = e.clientX;
+        view.lastY = e.clientY;
+        if (view.dragMode === "pan" && e.ctrlKey) {
+          view.panX += dx;
+          view.panY += dy;
+        } else {
+          view.rotY += dx * 0.0072;
+          view.rotX += dy * 0.0072;
+          view.rotX = clamp(view.rotX, -Math.PI / 2, Math.PI / 2);
+        }
+      });
+      const endPointer = (e) => {
+        if (view.ptrDown && !view.ptrMoved) {
+          burstAtScreen(e.clientX, e.clientY);
+        }
+        view.ptrDown = false;
+        view.ptrMoved = false;
+        view.dragging = false;
+        view.dragMode = "rotate";
+        canvas.classList.remove("dragging");
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      canvas.addEventListener("pointerup", endPointer);
+      canvas.addEventListener("pointercancel", endPointer);
+      canvas.addEventListener("pointerleave", (e) => {
+        if (!view.ptrDown) return;
+        view.ptrDown = false;
+        view.ptrMoved = false;
+        view.dragging = false;
+        canvas.classList.remove("dragging");
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      });
+
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const factor = Math.exp(-e.deltaY * 0.0015);
+        view.modelScale = clamp(view.modelScale * factor, 0.45, 4.0);
+      }, { passive: false });
+      window.addEventListener("resize", resizeCanvas);
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code !== "Space" && e.key !== " ") return;
+        const t = e.target;
+        if (
+          t &&
+          (t.tagName === "INPUT" ||
+            t.tagName === "TEXTAREA" ||
+            t.tagName === "SELECT" ||
+            t.isContentEditable)
+        ) {
+          return;
+        }
+        e.preventDefault();
+        paused = !paused;
+      });
+    }
+
+    function init() {
+      resizeCanvas();
+      try {
+        const s = localStorage.getItem("uiLang");
+        if (s === "zh" || s === "en") locale = s;
+      } catch (_) {}
+      try {
+        const ff = localStorage.getItem("textFontFamily");
+        if (ff && textFontFamilySelect) {
+          const ok = [...textFontFamilySelect.options].some((o) => o.value === ff);
+          if (ok) textFontFamilySelect.value = ff;
+        }
+      } catch (_) {}
+      try {
+        const vBold = localStorage.getItem("textStyleBold");
+        const vItalic = localStorage.getItem("textStyleItalic");
+        const vUnderline = localStorage.getItem("textStyleUnderline");
+        const vSpacing = localStorage.getItem("textLetterSpacing");
+        if (textBoldInput && (vBold === "0" || vBold === "1")) textBoldInput.checked = vBold === "1";
+        if (textItalicInput && (vItalic === "0" || vItalic === "1")) textItalicInput.checked = vItalic === "1";
+        if (textUnderlineInput && (vUnderline === "0" || vUnderline === "1")) textUnderlineInput.checked = vUnderline === "1";
+        if (textLetterSpacingInput && vSpacing !== null) {
+          const n = Number(vSpacing);
+          if (Number.isFinite(n)) textLetterSpacingInput.value = String(clamp(n, -2, 20));
+        }
+      } catch (_) {}
+      applyLocale();
+      updateOutputs();
+      syncTextButtons();
+      bindEvents();
+      const demo = createFallbackImage();
+      demo.onload = () => { currentImage = demo; rebuild(); };
+      requestAnimationFrame(render);
+    }
+    init();
+  </script>
+</body>
+</html>
